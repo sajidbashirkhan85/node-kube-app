@@ -4,4 +4,5 @@ spec:
         image: 716200069248.dkr.ecr.us-east-1.amazonaws.com/node-kube-app:latest
         imagePullPolicy: Always
         ports:
-        - containerPort: 3000# Force pipeline trigger
+        - containerPort: 3000
+# Force pipeline trigger
