@@ -1,4 +1,4 @@
-name: Node.js K8s CI/CD Pipeline
+name: Node.js CI/CD Pipeline
 
 on:
   push:
@@ -11,28 +11,27 @@ env:
 
 jobs:
   build-and-deploy:
-    name: Automate Build Push and Deploy
     runs-on: ubuntu-latest
 
     steps:
-      - name: Step 1 - Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Step 2 - Set up Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Step 3 - Configure AWS Credentials
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Step 4 - Log in to Amazon ECR
+      - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Step 5 - Build Tag and Push
+      - name: Build and Push Docker Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
@@ -40,32 +39,29 @@ jobs:
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      - name: Step 6 - SSH to EC2 and Deploy
+      - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           AWS_REGION: ${{ env.AWS_REGION }}
           ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
           IMAGE_TAG: ${{ github.sha }}
-
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: ECR_REGISTRY,AWS_REGION,ECR_REPOSITORY,IMAGE_TAG
-
           script: |
             set -e
 
-            echo "Successfully SSHed into EC2 instance"
-
+            echo "Logging into ECR..."
             aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
 
+            echo "Pulling image..."
             docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-            kubectl apply -f deployment.yaml
-
+            echo "Deploying to Kubernetes..."
             kubectl set image deployment/node-app-deployment \
-            node-app-container=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+              node-app-container=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
             kubectl rollout status deployment/node-app-deployment
