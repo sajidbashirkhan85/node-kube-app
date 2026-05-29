@@ -16,9 +16,8 @@ spec:
     spec:
       containers:
       - name: node-app-container
-        # ⚠️ YAHAN APNA AWS ACCOUNT ID BADLEIN (E.g., 123456789012.dkr.ecr.us-east-1.amazonaws.com...)
-        image: sajidbashirkhan85/node-kube-app:latest 
-        imagePullPolicy: Always # Taake Kubernetes har dafa AWS ECR se nayi image khinch kar laye
+716200069248.dkr.ecr.us-east-1.amazonaws.com/node-kube-app :latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 3000
 ---

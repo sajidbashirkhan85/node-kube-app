@@ -3,11 +3,11 @@ name: Node.js K8s CI/CD Pipeline
 on:
   push:
     branches:
-      - master 
+      - master
 
 env:
-  AWS_REGION: us-east-1                 
-  ECR_REPOSITORY: node-kube-app          
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: node-kube-app
 
 jobs:
   build-and-deploy:
@@ -15,15 +15,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Checkout code
     - name: Step 1 - Checkout Code
       uses: actions/checkout@v4
 
-    # 2. Set up Docker Buildx
     - name: Step 2 - Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    # 3. Configure AWS credentials
     - name: Step 3 - Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
@@ -31,23 +28,18 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
 
-    # 4. Log in to Amazon ECR
     - name: Step 4 - Log in to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
 
-    # 5 & 6. Build, Tag, and Push image to ECR
     - name: Steps 5 & 6 - Build, Tag, and Push Image to ECR
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: latest
       run: |
-       
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-        
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-    # 7, 8 & 9. SSH into EC2, Pull Image & Restart K8s Deployment
     - name: Steps 7, 8 & 9 - SSH to EC2 and Update Kubernetes
       uses: appleboy/ssh-action@v1.0.3
       with:
@@ -55,17 +47,13 @@ jobs:
         username: ${{ secrets.EC2_USERNAME }}
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
-          
           echo "Successfully SSHed into EC2 instance!"
           
-          
+          # ECR login on EC2 and Pull image
           aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
           docker pull ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
           
-         
-          
+          # Apply deployment changes if any, and restart rollout
+          kubectl apply -f deployment.yaml || true
           kubectl rollout restart deployment/node-app-deployment
-          
-          
           kubectl rollout status deployment/node-app-deployment
-   
