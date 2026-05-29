@@ -1,0 +1,71 @@
+name: Node.js K8s CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - master # Jab bhi aap 'master' branch par git push karenge, yeh pipeline chal parega
+
+env:
+  AWS_REGION: us-east-1                  # ⚠️ Agar aapka AWS region alag hai (e.g. us-west-2), to yahan badlein
+  ECR_REPOSITORY: node-kube-app          # ⚠️ Apne ECR Repository ka sahi naam yahan likhein
+
+jobs:
+  build-and-deploy:
+    name: Automate Build, Push and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Checkout code
+    - name: Step 1 - Checkout Code
+      uses: actions/checkout@v4
+
+    # 2. Set up Docker Buildx
+    - name: Step 2 - Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # 3. Configure AWS credentials
+    - name: Step 3 - Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    # 4. Log in to Amazon ECR
+    - name: Step 4 - Log in to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    # 5 & 6. Build, Tag, and Push image to ECR
+    - name: Steps 5 & 6 - Build, Tag, and Push Image to ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: latest
+      run: |
+        # Docker image build karna
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        # Image ko ECR repository par push karna
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+    # 7, 8 & 9. SSH into EC2, Pull Image & Restart K8s Deployment
+    - name: Steps 7, 8 & 9 - SSH to EC2 and Update Kubernetes
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          # Step 7: Hum EC2 ke andar enter ho chuke hain (via SSH)
+          echo "Successfully SSHed into EC2 instance!"
+          
+          # Step 8: ECR se latest image pull karna EC2 ke andar
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+          docker pull ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          
+          # Step 9: Kubernetes Deployment ko restart (rollout) karna taake naya code apply ho sake
+          # Note: Ensure minikube or your cluster context is active on EC2
+          kubectl rollout restart deployment/node-app-deployment
+          
+          # Status check karne ke liye taake confirm ho jaye deployment ho gayi
+          kubectl rollout status deployment/node-app-deployment
+   

@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-app-deployment
+  labels:
+    app: node-app
+spec:
+  replicas: 2 # Yeh aapki app ke 2 containers background mein chalaye rakhay ga (High Availability)
+  selector:
+    matchLabels:
+      app: node-app
+  template:
+    metadata:
+      labels:
+        app: node-app
+    spec:
+      containers:
+      - name: node-app-container
+        image: node-kube-app:v1 # Aapki local image ka naam
+        imagePullPolicy: IfNotPresent # Local image use karne ke liye zaroori hai
+        ports:
+        - containerPort: 3000 # Woh port jo aapki node app use karti hai
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-app-service
+spec:
+  type: NodePort # Local test karne ke liye sab se behtar hai
+  selector:
+    app: node-app
+  ports:
+    - protocol: TCP
+      port: 3000      # Service ka port
+      targetPort: 3000 # Container ka port
+      nodePort: 30080  # Is port par aap browser mein open karenge (Range: 30000-32767)
